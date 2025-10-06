@@ -405,22 +405,28 @@
                     
                 } else if (total === 7) { // Seven Out
                     lossAmount = (bets.passLine || 0) + (bets.odds || 0);
+                    let returnedBets = 0;
                     Object.keys(bets).forEach(key => {
                         if (key.startsWith('place')) {
                             if (arePlaceBetsWorking) {
                                 lossAmount += bets[key];
                             } else {
-                                bankroll += bets[key]; // Return non-working bet
+                                returnedBets += bets[key];
                             }
                         }
                     });
+                    
+                    bankroll += returnedBets; // Return non-working bets
+
                     message = 'Seven Out';
                     messageType = 'loss';
                     setLastResult(message, lossAmount, messageType);
                     
-                    // Clear all bets on seven out
-                    bets = {};
-                    resetGame(bankroll, minBet); // Resets state but keeps current bankroll
+                    // Reset for the next round WITHOUT clearing roll history
+                    bets = {}; // Clear all bets
+                    gameState = 'COME_OUT';
+                    point = null;
+                    arePlaceBetsWorking = false;
                     
                 } else {
                     if (placeWin > 0) {
