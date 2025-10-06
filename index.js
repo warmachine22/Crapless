@@ -1,3 +1,4 @@
+
 (function () {
     // --- CONSTANTS ---
     const CHIP_VALUES = [1, 5, 10, 25, 100];
@@ -169,7 +170,7 @@
 
         // History
         DOMElements.rollHistoryContainer.innerHTML = '';
-        rollHistory.forEach(item => {
+        rollHistory.slice().reverse().forEach(item => {
             const span = document.createElement('span');
             span.textContent = item.roll;
             if (item.type === 'win') span.className = 'text-green-400 font-bold';
@@ -223,7 +224,7 @@
 
             if (gameState === 'COME_OUT') {
                 if (total === 7) netWinLoss += passLineBet;
-            } else {
+            } else { // POINT_ON
                 if (total === 7) {
                     let loss = passLineBet + oddsBet;
                     if (arePlaceBetsWorking) {
@@ -232,9 +233,11 @@
                     netWinLoss -= loss;
                 } else if (total === point) {
                     netWinLoss += passLineBet;
-                    if (oddsBet && point) netWinLoss += oddsBet * ODDS_PAYOUTS[point].n / ODDS_PAYOUTS[point].d;
-                } 
-                if (arePlaceBetsWorking && bets[`place${total}`]) {
+                    if (oddsBet) netWinLoss += oddsBet * ODDS_PAYOUTS[point].n / ODDS_PAYOUTS[point].d;
+                }
+                
+                // Separate check for place bets, as they can win on any non-7 roll
+                if (arePlaceBetsWorking && bets[`place${total}`] && total !== point) {
                     netWinLoss += (bets[`place${total}`] || 0) * PLACE_PAYOUTS[total].n / PLACE_PAYOUTS[total].d;
                 }
             }
@@ -339,44 +342,92 @@
                     gameState = 'POINT_ON';
                     arePlaceBetsWorking = true;
                     message = `Point is ${total}`;
+                    
+                    const placeBetOnPointKey = `place${point}`;
+                    const amountToMove = bets[placeBetOnPointKey];
+
+                    if (amountToMove > 0) {
+                        const movePriority = [6, 8, 5, 9, 4, 10, 3, 11, 2, 12];
+                        let targetNumber = null;
+                        for (const num of movePriority) {
+                            if (num !== point && !bets[`place${num}`]) {
+                                targetNumber = num;
+                                break;
+                            }
+                        }
+                        
+                        delete bets[placeBetOnPointKey];
+                        if (targetNumber) {
+                            bets[`place${targetNumber}`] = amountToMove;
+                            message += `. Bet moved to ${targetNumber}.`;
+                        } else {
+                            bankroll += amountToMove;
+                            message += `. Bet on ${point} returned.`;
+                        }
+                    }
+
                     messageType = 'info';
                     setLastResult(message, 0, messageType);
                 }
             } else { // POINT_ON
+                let placeWin = 0;
+                if (total !== 7 && total !== point && arePlaceBetsWorking && PLACE_PAYOUTS[total] && bets[`place${total}`]) {
+                    placeWin = bets[`place${total}`] * PLACE_PAYOUTS[total].n / PLACE_PAYOUTS[total].d;
+                    bankroll += placeWin; // Pay profit, bet stays up
+                    winAmount += placeWin;
+                }
+
                 if (total === point) { // Point Hit
-                    winAmount += bets.passLine || 0;
-                    if (bets.odds) winAmount += (bets.odds || 0) * ODDS_PAYOUTS[point].n / ODDS_PAYOUTS[point].d;
+                    const passLineBet = bets.passLine || 0;
+                    const oddsBet = bets.odds || 0;
+                    const passLineWin = passLineBet;
+                    const oddsWin = oddsBet ? oddsBet * ODDS_PAYOUTS[point].n / ODDS_PAYOUTS[point].d : 0;
+                    
+                    winAmount += passLineWin + oddsWin;
+                    bankroll += (passLineWin + oddsWin) + passLineBet + oddsBet;
+
                     if (arePlaceBetsWorking && bets[`place${point}`]) {
-                        winAmount += bets[`place${point}`] * PLACE_PAYOUTS[point].n / PLACE_PAYOUTS[point].d;
+                        const placeWinOnPoint = bets[`place${point}`] * PLACE_PAYOUTS[point].n / PLACE_PAYOUTS[point].d;
+                        winAmount += placeWinOnPoint;
+                        bankroll += placeWinOnPoint; 
                     }
 
-                    const totalBetValue = Object.values(bets).reduce((s, v) => s + (v || 0), 0);
-                    bankroll += winAmount + totalBetValue;
-                    
-                    message = 'Point Hit!'; messageType = 'win';
+                    message = 'Point Hit!';
+                    messageType = 'win';
                     setLastResult(message, winAmount, messageType);
+
+                    // Reset for new round, KEEPING place bets.
+                    gameState = 'COME_OUT';
+                    point = null;
+                    delete bets.passLine;
+                    delete bets.odds;
+                    arePlaceBetsWorking = false; // Turn place bets off for the new come out roll.
                     
-                    gameState = 'COME_OUT'; point = null; bets = {}; arePlaceBetsWorking = false;
                 } else if (total === 7) { // Seven Out
                     lossAmount = (bets.passLine || 0) + (bets.odds || 0);
                     Object.keys(bets).forEach(key => {
                         if (key.startsWith('place')) {
-                            if (arePlaceBetsWorking) lossAmount += bets[key];
-                            else bankroll += bets[key]; // Return non-working bet
+                            if (arePlaceBetsWorking) {
+                                lossAmount += bets[key];
+                            } else {
+                                bankroll += bets[key]; // Return non-working bet
+                            }
                         }
                     });
-
-                    message = 'Seven Out'; messageType = 'loss';
+                    message = 'Seven Out';
+                    messageType = 'loss';
                     setLastResult(message, lossAmount, messageType);
                     
-                    gameState = 'COME_OUT'; point = null; bets = {}; arePlaceBetsWorking = false;
-                } else if (arePlaceBetsWorking && PLACE_PAYOUTS[total] && bets[`place${total}`]) {
-                    const placeWin = bets[`place${total}`] * PLACE_PAYOUTS[total].n / PLACE_PAYOUTS[total].d;
-                    bankroll += placeWin; // Pay win, bet stays up
-                    message = `Place ${total} Wins`; messageType = 'win';
-                    setLastResult(message, placeWin, messageType);
+                    // Clear all bets on seven out
+                    bets = {};
+                    resetGame(bankroll, minBet); // Resets state but keeps current bankroll
+                    
                 } else {
-                    setLastResult(`Rolled ${total}`, 0, 'roll');
+                    if (placeWin > 0) {
+                        setLastResult(`Place ${total} Wins`, placeWin, 'win');
+                    } else {
+                        setLastResult(`Rolled ${total}`, 0, 'roll');
+                    }
                 }
             }
 
@@ -391,12 +442,12 @@
     // --- INITIALIZATION ---
     function initialize() {
         // Create Chips
+        const chipColors = { 1: 'bg-gray-200 text-black border-2 border-gray-500', 5: 'bg-chip-red text-white', 10: 'bg-chip-blue text-white', 25: 'bg-chip-green text-white', 100: 'bg-chip-black text-white' };
         CHIP_VALUES.forEach(val => {
-            const colors = { 1: 'bg-gray-200 text-black border-2 border-gray-500', 5: 'bg-chip-red text-white', 10: 'bg-chip-blue text-white', 25: 'bg-chip-green text-white', 100: 'bg-chip-black text-white' };
             const chip = document.createElement('button');
             chip.dataset.value = val;
             chip.type = 'button';
-            chip.className = `w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl shadow-lg transition-transform hover:scale-110 ring-2 ring-white/50 ${colors[val]}`;
+            chip.className = `w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl shadow-lg transition-transform hover:scale-110 ring-2 ring-white/50 ${chipColors[val]}`;
             chip.textContent = `$${val}`;
             chip.onclick = () => { selectedChip = val; updateUI(); };
             DOMElements.chipContainer.appendChild(chip);
@@ -415,25 +466,23 @@
         DOMElements.passOddsContainer.appendChild(oddsSpot);
 
         // Add Event Listeners
+        const handleBetEvent = (e) => {
+            const spot = e.target.closest('.betting-spot');
+            if (spot) handleBet(spot.dataset.betKey);
+        };
+        const handleRemoveBetEvent = (e) => {
+            e.preventDefault();
+            const spot = e.target.closest('.betting-spot');
+            if (spot) removeBet(spot.dataset.betKey);
+        };
+
+        // Use a single listener on the body for context menu to prevent default.
         document.body.oncontextmenu = e => e.preventDefault();
-        DOMElements.placeBetsContainer.addEventListener('click', e => {
-            const spot = e.target.closest('.betting-spot');
-            if (spot) handleBet(spot.dataset.betKey);
-        });
-        DOMElements.placeBetsContainer.addEventListener('contextmenu', e => {
-            e.preventDefault();
-            const spot = e.target.closest('.betting-spot');
-            if (spot) removeBet(spot.dataset.betKey);
-        });
-        DOMElements.passOddsContainer.addEventListener('click', e => {
-            const spot = e.target.closest('.betting-spot');
-            if (spot) handleBet(spot.dataset.betKey);
-        });
-        DOMElements.passOddsContainer.addEventListener('contextmenu', e => {
-            e.preventDefault();
-            const spot = e.target.closest('.betting-spot');
-            if (spot) removeBet(spot.dataset.betKey);
-        });
+        
+        const bettingArea = document.getElementById('pass-odds-container').parentElement;
+        bettingArea.addEventListener('click', handleBetEvent);
+        bettingArea.addEventListener('contextmenu', handleRemoveBetEvent);
+
 
         DOMElements.rollButton.onclick = handleRoll;
         DOMElements.clearBetsButton.onclick = handleClearBets;

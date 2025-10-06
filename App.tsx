@@ -203,7 +203,7 @@ export default function App() {
         delete (currentBets as any)[key]
     });
 
-    // Fix: Correctly handle `val` which may be of type `unknown` by explicitly converting it to a number. This resolves multiple type errors on this line.
+    // Fix: Correctly handle `val` which may be of type `unknown` by explicitly converting it to a number. This resolves the TypeScript error.
     amountToReturn = Object.values(currentBets).reduce((sum: number, val) => sum + (Number(val) || 0), 0);
 
     if (amountToReturn > 0) {
