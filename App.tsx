@@ -50,7 +50,8 @@ export default function App() {
     setArePlaceBetsWorking(gameState === 'POINT_ON');
   }, [gameState]);
 
-  const totalBetAmount = useMemo(() => Object.values(bets).reduce((sum: number, val) => sum + (val || 0), 0), [bets]);
+  // Fix: Correctly handle `val` which may be of type `unknown` by explicitly converting it to a number.
+  const totalBetAmount = useMemo(() => Object.values(bets).reduce((sum: number, val) => sum + (Number(val) || 0), 0), [bets]);
 
   const rollProbabilities = useMemo(() => {
     if (totalBetAmount === 0) {
@@ -202,7 +203,8 @@ export default function App() {
         delete (currentBets as any)[key]
     });
 
-    amountToReturn = Object.values(currentBets).reduce((sum: number, val) => sum + (val || 0), 0);
+    // Fix: Correctly handle `val` which may be of type `unknown` by explicitly converting it to a number. This resolves multiple type errors on this line.
+    amountToReturn = Object.values(currentBets).reduce((sum: number, val) => sum + (Number(val) || 0), 0);
 
     if (amountToReturn > 0) {
         setBankroll(prev => prev + amountToReturn);
