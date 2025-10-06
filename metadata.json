@@ -1,0 +1,5 @@
+{
+  "name": "Crapless Craps Simulator (Vanilla JS)",
+  "description": "A rapid-play simulator for Crapless Craps, built with vanilla HTML/CSS/JS for deployment on static hosts like GitHub Pages. Practice betting strategies with instant dice rolls and clear feedback.",
+  "requestFramePermissions": []
+}
